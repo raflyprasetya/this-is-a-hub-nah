@@ -213,7 +213,7 @@ app.get('/api', verifyApiKey, async (req, res) => {
         if (!fs.existsSync(scriptPath)) {
             return res.status(404).json({ error: 'TLS.js not found' });
         }
-        const concurrent = 50;
+        const concurrent = 5;
         command = `node ${scriptPath} ${ip} ${parsedPort} ${PROXY_FILE} ${concurrent} ${parsedTime}`;
         console.log(`[TLS] Using proxies with prefixes (http://, socks://, etc)`);
 
