@@ -6,6 +6,18 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Cek apakah SERVER_DOMAIN sudah di-set sebagai environment variable
+if [ -z "$SERVER_DOMAIN" ]; then
+    # Jika tidak ada, cek argumen pertama
+    if [ -n "$1" ]; then
+        SERVER_DOMAIN="$1"
+    else
+        echo -e "${RED}Usage: SERVER_DOMAIN=domain.com ./setup.sh${NC}"
+        echo -e "${RED}Or: ./setup.sh domain.com${NC}"
+        exit 1
+    fi
+fi
+
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}       RF-47 Network Setup Script       ${NC}"
 echo -e "${GREEN}              Version 3.0                ${NC}"
@@ -36,7 +48,6 @@ echo -e "${GREEN}Node.js version: ${NODE_VERSION}${NC}"
 # ==================== CLONE FROM GITHUB ====================
 echo -e "${YELLOW}[7/12] Cloning from GitHub...${NC}"
 
-# Backup existing directory
 if [ -d "this-is-a-hub-nah" ]; then
     echo -e "${YELLOW}Directory this-is-a-hub-nah already exists, updating...${NC}"
     cd this-is-a-hub-nah
@@ -70,7 +81,6 @@ fi
 # ==================== INSTALL NPM PACKAGES ====================
 echo -e "${YELLOW}[9/12] Installing npm dependencies...${NC}"
 
-# Install all required dependencies
 npm install express randomstring user-agents axios commander hpack request --silent
 
 if [ $? -ne 0 ]; then
@@ -79,7 +89,6 @@ if [ $? -ne 0 ]; then
     npm install express randomstring user-agents axios commander hpack request --force
 fi
 
-# Verify installations
 echo -e "${YELLOW}Verifying installations...${NC}"
 if npm list express randomstring user-agents axios commander hpack request --depth=0 &>/dev/null; then
     echo -e "${GREEN}All dependencies installed successfully!${NC}"
@@ -99,7 +108,6 @@ echo -e "${GREEN}NPM dependencies installed!${NC}"
 # ==================== CREATE DEFAULT FILES ====================
 echo -e "${YELLOW}[10/12] Creating default configuration files...${NC}"
 
-# Create empty proxy.txt if not exists
 if [ ! -f "scripts/proxy.txt" ]; then
     touch scripts/proxy.txt
     echo -e "${GREEN}Created empty proxy.txt${NC}"
@@ -107,7 +115,6 @@ else
     echo -e "${GREEN}proxy.txt already exists${NC}"
 fi
 
-# Create default ua.txt if not exists
 if [ ! -f "scripts/ua.txt" ]; then
     cat > scripts/ua.txt << 'EOF'
 Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/112.0
@@ -126,23 +133,15 @@ else
     echo -e "${GREEN}ua.txt already exists${NC}"
 fi
 
-# ==================== CONFIGURE SERVER (ONLY DOMAIN) ====================
+# ==================== CONFIGURE SERVER ====================
 echo -e ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${YELLOW}       Server Configuration             ${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo -e ""
+echo -e "${GREEN}Using server domain: ${SERVER_DOMAIN}${NC}"
 
-read -p "Enter your server domain (example: api.rf47.com): " SERVER_DOMAIN
-
-if [ -z "$SERVER_DOMAIN" ]; then
-    SERVER_DOMAIN="localhost"
-    echo -e "${YELLOW}No input detected, using default: ${SERVER_DOMAIN}${NC}"
-else
-    echo -e "${GREEN}Using server domain: ${SERVER_DOMAIN}${NC}"
-fi
-
-# ==================== DEFAULT VALUES (NO QUESTIONS) ====================
+# ==================== DEFAULT VALUES ====================
 GAS_URL="https://script.google.com/macros/s/AKfycbxavnz3eaPAy3CwIUsM4bsv3JFhhi4rwGCT3f1VDKoLl7MjaA9_jj7YrKfGeIvjgSLRsA/exec"
 PING_ENABLED="true"
 SERVER_PORT="3000"
@@ -207,10 +206,7 @@ fi
 echo -e ""
 echo -e "${YELLOW}[11/12] Starting server with tmux...${NC}"
 
-# Kill existing tmux session if any
 tmux kill-session -t rf47 2>/dev/null
-
-# Start new tmux session
 tmux new-session -d -s rf47 "node server.js"
 
 if [ $? -eq 0 ]; then
