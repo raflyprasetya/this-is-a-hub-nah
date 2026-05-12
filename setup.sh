@@ -1,5 +1,5 @@
 #!/bin/bash
-tmux kill-session -t rf47
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -8,7 +8,6 @@ NC='\033[0m'
 
 # Cek apakah SERVER_DOMAIN sudah di-set sebagai environment variable
 if [ -z "$SERVER_DOMAIN" ]; then
-    # Jika tidak ada, cek argumen pertama
     if [ -n "$1" ]; then
         SERVER_DOMAIN="$1"
     else
@@ -23,58 +22,154 @@ echo -e "${GREEN}       RF-47 Network Setup Script       ${NC}"
 echo -e "${GREEN}              Version 3.0                ${NC}"
 echo -e "${GREEN}========================================${NC}"
 
-# ==================== HAPUS TMUX DAN MATIKAN SESSION ====================
-echo -e "${YELLOW}[0/12] Removing tmux and killing tmux sessions...${NC}"
+# ==================== HAPUS SEMUA TMUX SESSION ====================
+echo -e "${YELLOW}[0/13] Killing ALL tmux sessions...${NC}"
 
-# Matikan session tmux rf47 jika ada
+# Kill semua tmux session
 if command -v tmux &> /dev/null; then
-    echo -e "${YELLOW}Killing tmux session 'rf47'...${NC}"
+    echo -e "${YELLOW}Killing all tmux sessions...${NC}"
+    
+    # Matikan session spesifik rf47
     tmux kill-session -t rf47 2>/dev/null
     
     # Matikan semua session tmux
-    echo -e "${YELLOW}Killing all tmux sessions...${NC}"
     tmux kill-server 2>/dev/null
     
-    # Hapus paket tmux
-    echo -e "${YELLOW}Removing tmux package...${NC}"
-    apt remove tmux -y
-    apt purge tmux -y
-    apt autoremove -y
+    # Kill dengan pkill
+    pkill -9 tmux 2>/dev/null
+    killall -9 tmux 2>/dev/null
     
-    echo -e "${GREEN}tmux has been removed!${NC}"
+    # Hapus socket tmux
+    rm -rf /tmp/tmux-* 2>/dev/null
+    rm -rf /var/run/tmux/* 2>/dev/null
+    
+    echo -e "${GREEN}✓ All tmux sessions killed!${NC}"
 else
-    echo -e "${GREEN}tmux is not installed, skipping...${NC}"
+    echo -e "${GREEN}tmux not installed, skipping...${NC}"
 fi
 
+# ==================== HAPUS SEMUA SCREEN SESSION (AGRESIF) ====================
+echo -e "${YELLOW}[1/13] Killing ALL screen sessions (aggressive mode)...${NC}"
+
+# Method 1: Kill semua screen process dengan pkill
+if command -v pkill &> /dev/null; then
+    echo -e "${YELLOW}Killing all screen processes with pkill...${NC}"
+    pkill -9 screen 2>/dev/null
+    pkill -9 SCREEN 2>/dev/null
+fi
+
+# Method 2: Kill dengan killall
+if command -v killall &> /dev/null; then
+    echo -e "${YELLOW}Killing all screen processes with killall...${NC}"
+    killall -9 screen 2>/dev/null
+    killall -9 SCREEN 2>/dev/null
+fi
+
+# Method 3: Hapus semua socket screen yang tersisa
+echo -e "${YELLOW}Removing screen sockets...${NC}"
+rm -rf /var/run/screen/* 2>/dev/null
+rm -rf /tmp/screen* 2>/dev/null
+rm -rf ~/.screen/* 2>/dev/null
+
+# Method 4: Loop sampai benar-benar bersih (max 5 kali)
+for i in {1..5}; do
+    SESSION_COUNT=$(screen -ls 2>/dev/null | grep -c "\. [0-9]" || echo "0")
+    if [ "$SESSION_COUNT" -eq 0 ]; then
+        break
+    fi
+    echo -e "${YELLOW}Attempt $i: Found $SESSION_COUNT session(s), killing...${NC}"
+    
+    screen -ls | grep -E '[0-9]+\.' | cut -d. -f1 | awk '{print $1}' 2>/dev/null | while read session; do
+        echo -e "${YELLOW}Killing screen session: $session${NC}"
+        screen -S "$session" -X quit 2>/dev/null
+        screen -S "$session" -X kill 2>/dev/null
+    done
+    
+    screen -wipe 2>/dev/null
+    sleep 1
+done
+
+# Method 5: Matikan session spesifik rf47
+echo -e "${YELLOW}Killing specific session 'rf47'...${NC}"
+screen -S rf47 -X quit 2>/dev/null
+screen -S rf47 -X kill 2>/dev/null
+
+# Verifikasi screen
+echo -e "${YELLOW}Verifying no screen sessions left...${NC}"
+REMAINING=$(screen -ls 2>/dev/null | grep -c "\. [0-9]" || echo "0")
+if [ "$REMAINING" -eq 0 ]; then
+    echo -e "${GREEN}✓ All screen sessions have been killed!${NC}"
+else
+    echo -e "${RED}⚠ Warning: $REMAINING screen session(s) still running${NC}"
+    # Force kill dengan PID
+    screen -ls | grep -E '[0-9]+\.' | while read line; do
+        PID=$(echo "$line" | awk '{print $1}' | cut -d. -f1)
+        if [ -n "$PID" ]; then
+            echo -e "${RED}Force killing PID: $PID${NC}"
+            kill -9 "$PID" 2>/dev/null
+        fi
+    done
+fi
+
+echo -e "${GREEN}Cleanup completed!${NC}"
+
 # ==================== UPDATE SYSTEM ====================
-echo -e "${YELLOW}[1/12] Updating system packages...${NC}"
+echo -e "${YELLOW}[2/13] Updating system packages...${NC}"
 apt update -y && apt upgrade -y
 
 # ==================== INSTALL DEPENDENCIES ====================
-echo -e "${YELLOW}[2/12] Installing Node.js and npm...${NC}"
+echo -e "${YELLOW}[3/13] Installing Node.js and npm...${NC}"
 apt install nodejs npm -y
 
-echo -e "${YELLOW}[3/12] Installing screen...${NC}"
+echo -e "${YELLOW}[4/13] Installing screen...${NC}"
 apt install screen -y
 
-echo -e "${YELLOW}[4/12] Installing git...${NC}"
+echo -e "${YELLOW}[5/13] Installing git...${NC}"
 apt install git -y
 
-echo -e "${YELLOW}[5/12] Installing wget and curl...${NC}"
+echo -e "${YELLOW}[6/13] Installing wget and curl...${NC}"
 apt install wget curl -y
 
+# ==================== HAPUS TMUX (PASTIKAN TIDAK TERINSTALL) ====================
+echo -e "${YELLOW}[7/13] Removing tmux package if exists...${NC}"
+if command -v tmux &> /dev/null; then
+    echo -e "${YELLOW}Removing tmux...${NC}"
+    apt remove tmux -y 2>/dev/null
+    apt purge tmux -y 2>/dev/null
+    apt autoremove -y 2>/dev/null
+    echo -e "${GREEN}✓ tmux removed!${NC}"
+else
+    echo -e "${GREEN}tmux not installed, skipping...${NC}"
+fi
+
 # ==================== CHECK NODE VERSION ====================
-echo -e "${YELLOW}[6/12] Checking Node.js version...${NC}"
+echo -e "${YELLOW}[8/13] Checking Node.js version...${NC}"
 NODE_VERSION=$(node -v)
 echo -e "${GREEN}Node.js version: ${NODE_VERSION}${NC}"
 
-# ==================== STOP SCREEN SESSION LAMA ====================
-echo -e "${YELLOW}Stopping old screen session 'rf47' if exists...${NC}"
+# ==================== STOP SCREEN SESSION LAMA LAGI (PASTIKAN MATI) ====================
+echo -e "${YELLOW}Ensuring all screen sessions are killed (second pass)...${NC}"
+
+# Kill lagi setelah screen terinstall
+pkill -9 screen 2>/dev/null
+killall -9 screen 2>/dev/null
+
+screen -ls | grep -E '[0-9]+\.' | cut -d. -f1 | awk '{print $1}' 2>/dev/null | while read session; do
+    echo -e "${YELLOW}Killing screen session: $session${NC}"
+    screen -S "$session" -X quit 2>/dev/null
+done
+
 screen -S rf47 -X quit 2>/dev/null
-echo -e "${GREEN}Old screen session cleaned!${NC}"
+screen -wipe 2>/dev/null
+
+# Bersihkan socket lagi
+rm -rf /var/run/screen/* 2>/dev/null
+rm -rf /tmp/screen* 2>/dev/null
+
+echo -e "${GREEN}All screen sessions cleaned!${NC}"
 
 # ==================== CLONE FROM GITHUB ====================
-echo -e "${YELLOW}[7/12] Cloning from GitHub...${NC}"
+echo -e "${YELLOW}[9/13] Cloning from GitHub...${NC}"
 
 if [ -d "this-is-a-hub-nah" ]; then
     echo -e "${YELLOW}Directory this-is-a-hub-nah already exists, updating...${NC}"
@@ -97,7 +192,7 @@ echo -e "${GREEN}Clone completed!${NC}"
 cd this-is-a-hub-nah
 
 # ==================== CREATE SCRIPTS DIRECTORY ====================
-echo -e "${YELLOW}[8/12] Creating scripts directory...${NC}"
+echo -e "${YELLOW}[10/13] Creating scripts directory...${NC}"
 mkdir -p scripts
 
 # ==================== CLEAN NODE_MODULES (if exists) ====================
@@ -107,7 +202,7 @@ if [ -d "node_modules" ]; then
 fi
 
 # ==================== INSTALL NPM PACKAGES ====================
-echo -e "${YELLOW}[9/12] Installing npm dependencies...${NC}"
+echo -e "${YELLOW}[11/13] Installing npm dependencies...${NC}"
 
 npm install express randomstring user-agents axios commander hpack request --silent
 
@@ -134,7 +229,7 @@ fi
 echo -e "${GREEN}NPM dependencies installed!${NC}"
 
 # ==================== CREATE DEFAULT FILES ====================
-echo -e "${YELLOW}[10/12] Creating default configuration files...${NC}"
+echo -e "${YELLOW}[12/13] Creating default configuration files...${NC}"
 
 if [ ! -f "scripts/proxy.txt" ]; then
     touch scripts/proxy.txt
@@ -230,12 +325,46 @@ else
     echo -e "${YELLOW}⚠ scripts/Browser.js not found (optional)${NC}"
 fi
 
+# ==================== PASTIKAN TIDAK ADA SCREEN ATAU TMUX SEBELUM START ====================
+echo -e "${YELLOW}Final cleanup before starting (third pass)...${NC}"
+
+# Kill all screen processes
+pkill -9 screen 2>/dev/null
+killall -9 screen 2>/dev/null
+
+# Kill all tmux processes (just in case)
+pkill -9 tmux 2>/dev/null
+killall -9 tmux 2>/dev/null
+
+# Loop until no screen sessions left
+MAX_ITER=10
+for i in $(seq 1 $MAX_ITER); do
+    SESSION_COUNT=$(screen -ls 2>/dev/null | grep -c "\. [0-9]" || echo "0")
+    if [ "$SESSION_COUNT" -eq 0 ]; then
+        echo -e "${GREEN}✓ No screen sessions found (iteration $i)${NC}"
+        break
+    fi
+    echo -e "${YELLOW}Iteration $i: $SESSION_COUNT session(s) remain, killing...${NC}"
+    
+    screen -ls | grep -E '[0-9]+\.' | cut -d. -f1 | awk '{print $1}' 2>/dev/null | while read session; do
+        screen -S "$session" -X quit 2>/dev/null
+        screen -S "$session" -X kill 2>/dev/null
+    done
+    
+    screen -wipe 2>/dev/null
+    sleep 1
+done
+
+# Bersihkan socket screen dan tmux
+rm -rf /var/run/screen/* 2>/dev/null
+rm -rf /tmp/screen* 2>/dev/null
+rm -rf /tmp/tmux-* 2>/dev/null
+
+echo -e "${GREEN}All screen and tmux sessions killed! Ready to start fresh.${NC}"
+
 # ==================== START SERVER WITH SCREEN ====================
 echo -e ""
-echo -e "${YELLOW}[11/12] Starting server with screen...${NC}"
-
-# Kill existing screen session if it exists
-screen -S rf47 -X quit 2>/dev/null
+echo -e "${YELLOW}[13/13] Starting server with screen...${NC}"
 
 # Create new screen session and run server
 screen -dmS rf47 bash -c "node server.js"
