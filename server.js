@@ -227,7 +227,7 @@ app.get('/api', verifyApiKey, async (req, res) => {
         // Dapatkan file proxy yang sudah dibersihkan (tanpa prefix)
         const cleanProxyFile = getCleanProxiesForTLSV2();
         const rateParam = 120;
-        command = `node ${scriptPath} ${target} ${parsedTime} ${rateParam} 8 ${cleanProxyFile}`;
+        command = `node ${scriptPath} ${target} ${parsedTime} 32 4 ${cleanProxyFile}`;
 
         console.log(`[TLSV2] Using CLEAN proxies (without http://, https://, socks4://, socks5:// prefixes)`);
 
