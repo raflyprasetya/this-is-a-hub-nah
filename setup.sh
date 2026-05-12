@@ -31,8 +31,8 @@ apt update -y && apt upgrade -y
 echo -e "${YELLOW}[2/12] Installing Node.js and npm...${NC}"
 apt install nodejs npm -y
 
-echo -e "${YELLOW}[3/12] Installing tmux...${NC}"
-apt install tmux -y
+echo -e "${YELLOW}[3/12] Installing screen...${NC}"
+apt install screen -y
 
 echo -e "${YELLOW}[4/12] Installing git...${NC}"
 apt install git -y
@@ -202,15 +202,18 @@ else
     echo -e "${YELLOW}⚠ scripts/Browser.js not found (optional)${NC}"
 fi
 
-# ==================== START SERVER WITH TMUX ====================
+# ==================== START SERVER WITH SCREEN ====================
 echo -e ""
-echo -e "${YELLOW}[11/12] Starting server with tmux...${NC}"
+echo -e "${YELLOW}[11/12] Starting server with screen...${NC}"
 
-tmux kill-session -t rf47 2>/dev/null
-tmux new-session -d -s rf47 "node server.js"
+# Kill existing screen session if it exists
+screen -S rf47 -X quit 2>/dev/null
+
+# Create new screen session and run server
+screen -dmS rf47 bash -c "node server.js"
 
 if [ $? -eq 0 ]; then
-    echo -e "${GREEN}Server started in tmux session: rf47${NC}"
+    echo -e "${GREEN}Server started in screen session: rf47${NC}"
 else
     echo -e "${RED}Failed to start server!${NC}"
     exit 1
@@ -238,11 +241,12 @@ echo -e "  ${GREEN}● fast${NC}    - H2-FAST Advanced HTTP2 Flood with AI Finge
 echo -e "  ${GREEN}● browser${NC} - Browser Engine - Real browser simulation"
 echo -e ""
 echo -e "${BLUE}Commands:${NC}"
-echo -e "  ${YELLOW}tmux attach -t rf47${NC}       - Attach to server session"
-echo -e "  ${YELLOW}tmux detach${NC}               - Detach (Ctrl+B then D)"
-echo -e "  ${YELLOW}tmux kill-session -t rf47${NC} - Stop the server"
-echo -e "  ${YELLOW}cat config.json${NC}           - View configuration"
-echo -e "  ${YELLOW}npm list --depth=0${NC}        - List installed packages"
+echo -e "  ${YELLOW}screen -r rf47${NC}               - Attach to server session"
+echo -e "  ${YELLOW}Ctrl+A then D${NC}                - Detach from screen session"
+echo -e "  ${YELLOW}screen -S rf47 -X quit${NC}       - Stop the server"
+echo -e "  ${YELLOW}screen -ls${NC}                   - List all screen sessions"
+echo -e "  ${YELLOW}cat config.json${NC}              - View configuration"
+echo -e "  ${YELLOW}npm list --depth=0${NC}           - List installed packages"
 echo -e ""
 echo -e "${BLUE}API Examples:${NC}"
 echo -e "  ${YELLOW}# TLS Method${NC}"
