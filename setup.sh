@@ -1,5 +1,5 @@
 #!/bin/bash
-
+tmux kill-session -t rf47
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -23,6 +23,29 @@ echo -e "${GREEN}       RF-47 Network Setup Script       ${NC}"
 echo -e "${GREEN}              Version 3.0                ${NC}"
 echo -e "${GREEN}========================================${NC}"
 
+# ==================== HAPUS TMUX DAN MATIKAN SESSION ====================
+echo -e "${YELLOW}[0/12] Removing tmux and killing tmux sessions...${NC}"
+
+# Matikan session tmux rf47 jika ada
+if command -v tmux &> /dev/null; then
+    echo -e "${YELLOW}Killing tmux session 'rf47'...${NC}"
+    tmux kill-session -t rf47 2>/dev/null
+    
+    # Matikan semua session tmux
+    echo -e "${YELLOW}Killing all tmux sessions...${NC}"
+    tmux kill-server 2>/dev/null
+    
+    # Hapus paket tmux
+    echo -e "${YELLOW}Removing tmux package...${NC}"
+    apt remove tmux -y
+    apt purge tmux -y
+    apt autoremove -y
+    
+    echo -e "${GREEN}tmux has been removed!${NC}"
+else
+    echo -e "${GREEN}tmux is not installed, skipping...${NC}"
+fi
+
 # ==================== UPDATE SYSTEM ====================
 echo -e "${YELLOW}[1/12] Updating system packages...${NC}"
 apt update -y && apt upgrade -y
@@ -44,6 +67,11 @@ apt install wget curl -y
 echo -e "${YELLOW}[6/12] Checking Node.js version...${NC}"
 NODE_VERSION=$(node -v)
 echo -e "${GREEN}Node.js version: ${NODE_VERSION}${NC}"
+
+# ==================== STOP SCREEN SESSION LAMA ====================
+echo -e "${YELLOW}Stopping old screen session 'rf47' if exists...${NC}"
+screen -S rf47 -X quit 2>/dev/null
+echo -e "${GREEN}Old screen session cleaned!${NC}"
 
 # ==================== CLONE FROM GITHUB ====================
 echo -e "${YELLOW}[7/12] Cloning from GitHub...${NC}"
