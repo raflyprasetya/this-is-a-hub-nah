@@ -201,19 +201,20 @@ if [ -d "node_modules" ]; then
     rm -rf node_modules package-lock.json
 fi
 
-# ==================== INSTALL NPM PACKAGES ====================
+# ==================== INSTALL NPM PACKAGES (LENGKAP) ====================
 echo -e "${YELLOW}[11/13] Installing npm dependencies...${NC}"
 
-npm install express randomstring user-agents axios commander hpack request --silent
+# Install semua package yang diperlukan
+npm install express randomstring user-agents axios commander hpack request cloudscraper https-proxy-agent socks-proxy-agent --silent
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}Failed to install npm dependencies!${NC}"
     echo -e "${YELLOW}Retrying with force...${NC}"
-    npm install express randomstring user-agents axios commander hpack request --force
+    npm install express randomstring user-agents axios commander hpack request cloudscraper https-proxy-agent socks-proxy-agent --force
 fi
 
 echo -e "${YELLOW}Verifying installations...${NC}"
-if npm list express randomstring user-agents axios commander hpack request --depth=0 &>/dev/null; then
+if npm list express randomstring user-agents axios commander hpack request cloudscraper https-proxy-agent socks-proxy-agent --depth=0 &>/dev/null; then
     echo -e "${GREEN}All dependencies installed successfully!${NC}"
 else
     echo -e "${RED}Some dependencies may be missing. Installing one by one...${NC}"
@@ -224,6 +225,9 @@ else
     npm install commander
     npm install hpack
     npm install request
+    npm install cloudscraper
+    npm install https-proxy-agent
+    npm install socks-proxy-agent
 fi
 
 echo -e "${GREEN}NPM dependencies installed!${NC}"
@@ -299,30 +303,6 @@ if [ -f "server.js" ]; then
 else
     echo -e "${RED}✗ server.js not found!${NC}"
     exit 1
-fi
-
-if [ -f "scripts/TLS.js" ]; then
-    echo -e "${GREEN}✓ scripts/TLS.js found${NC}"
-else
-    echo -e "${YELLOW}⚠ scripts/TLS.js not found (optional)${NC}"
-fi
-
-if [ -f "scripts/TLSV2.js" ]; then
-    echo -e "${GREEN}✓ scripts/TLSV2.js found${NC}"
-else
-    echo -e "${YELLOW}⚠ scripts/TLSV2.js not found (optional)${NC}"
-fi
-
-if [ -f "scripts/CF-BYPASS.js" ]; then
-    echo -e "${GREEN}✓ scripts/CF-BYPASS.js found${NC}"
-else
-    echo -e "${YELLOW}⚠ scripts/CF-BYPASS.js not found (optional)${NC}"
-fi
-
-if [ -f "scripts/Browser.js" ]; then
-    echo -e "${GREEN}✓ scripts/Browser.js found${NC}"
-else
-    echo -e "${YELLOW}⚠ scripts/Browser.js not found (optional)${NC}"
 fi
 
 # ==================== PASTIKAN TIDAK ADA SCREEN ATAU TMUX SEBELUM START ====================
