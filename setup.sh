@@ -22,6 +22,36 @@ echo -e "${GREEN}       RF-47 Network Setup Script       ${NC}"
 echo -e "${GREEN}              Version 3.0                ${NC}"
 echo -e "${GREEN}========================================${NC}"
 
+# Cek apakah sudah ada screen session yang running
+if screen -list | grep -q "\.rf47"; then
+    echo -e "${YELLOW}Screen session 'rf47' already exists!${NC}"
+    echo -e "${YELLOW}Killing existing session...${NC}"
+    screen -S rf47 -X quit 2>/dev/null
+    sleep 2
+fi
+
+# Jalankan seluruh proses setup di dalam screen
+echo -e "${GREEN}Starting setup in background screen session...${NC}"
+echo -e "${GREEN}You can detach with Ctrl+A+D or close this terminal${NC}"
+echo -e "${GREEN}Setup will continue running in screen session 'rf47'${NC}\n"
+
+# Buat script sementara untuk dijalankan di screen
+cat > /tmp/setup_runner.sh << 'INNER_SCRIPT'
+#!/bin/bash
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+SERVER_DOMAIN="$1"
+
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}       RF-47 Network Setup Script       ${NC}"
+echo -e "${GREEN}              Version 3.0                ${NC}"
+echo -e "${GREEN}========================================${NC}"
+
 # ==================== HAPUS SEMUA TMUX SESSION ====================
 echo -e "${YELLOW}[0/13] Killing ALL tmux sessions...${NC}"
 
@@ -402,3 +432,20 @@ echo -e "  ${YELLOW}# BROWSER Method${NC}"
 echo -e "  curl \"http://localhost:3000/api?api_key=rfpromax1337&ip=example.com&method=browser&port=443&time=30&threads=10&browser_count=5&conn_timeout=30000&rps=10\""
 echo -e ""
 echo -e "${GREEN}========================================${NC}"
+
+# Kirim sinyal bahwa proses selesai (opsional)
+echo -e "${GREEN}Setup completed in background!${NC}" > /tmp/setup_complete_$$.txt
+
+INNER_SCRIPT
+
+# Jalankan inner script di dalam screen session
+chmod +x /tmp/setup_runner.sh
+screen -dmS rf47 bash -c "/tmp/setup_runner.sh '$SERVER_DOMAIN' && rm -f /tmp/setup_runner.sh"
+
+echo -e "${GREEN}✓ Setup has been started in background screen session 'rf47'${NC}"
+echo -e "${YELLOW}The setup process is running in detached screen session${NC}"
+echo -e "${YELLOW}You can check progress later with: screen -r rf47${NC}"
+echo -e "${GREEN}This terminal can now be closed safely${NC}\n"
+
+# Langsung exit tanpa menunggu proses selesai
+exit 0
